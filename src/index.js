@@ -13,7 +13,7 @@ const userPool = new CognitoUserPool ({
 });
 
 const register = (registerRequest) => {
-    //ToDo introduce Promie instead of callbacks
+    return new Promise((resolve, reject) => {
     const attributeList = [
         new CognitoUserAttribute ({
             Name: 'website',
@@ -21,28 +21,35 @@ const register = (registerRequest) => {
         })
     ];
 
-    userPool.signUp(registerRequest.email, registerRequest.password, [], null, (err, result) => {
+    userPool.signUp(
+        registerRequest.email, 
+        registerRequest.password, 
+        attributeList, 
+        null,
+        (err, result) => {
         if (err) {
-            console.log(err);
-            return;
+            reject(err)
         }
 
-        console.log(result);
-        })
-    } 
+        resolve(result);
+            }
+            )
+    })
+} 
+
 const confirmAccount = (confirmRequest) => {
+    return new Promise((resolve, reject) => {
     const user = new CognitoUser({
         Username: confirmRequest.email,
         Pool: userPool
     });
     user.confirmRegistration(confirmRequest.code, true, (err, result) => {
         if (err) {
-            console.log(err);
-            return;
+            reject(err);
         }
-
-        console.log(result);
+        resolve(result);
     })
+});
 }
 
 const login = (loginRequest) => {
@@ -56,15 +63,44 @@ const login = (loginRequest) => {
         Pool: userPool
     });
 
-    user.authenticateUser(authDetails, {
+    return new Promise((resolve, reject) => {
+        user.authenticateUser(authDetails, {
         onSuccess: (result) => {
-            console.log(result);
+            resolve(result);
         },
         onFailure: (err) => {
-            console.log(err);
+            reject(err);
         }
     })
+});
 }
+
+const getCurrentUser = () => {
+    return new Promise((resolve, reject) => {
+        const user = userPool.getCurrentUser();
+
+        if (user == null) {
+            reject("User not available");
+        }
+        user.getSession((err, session) => {
+            if (err) {
+                reject(err);
+            }
+            
+            user.getUserAttributes((err, attributes) => {
+                if (err) {
+                    reject(err);
+                }
+                const profile = attributes.reduce((profile, item) => {
+                    return {...profile, [item.Name]: item.Value}
+                }, {});
+
+                resolve(profile)
+                });
+    })
+})
+}
+
 const foo = "boo";
 const registerBtn = document.querySelector('button.register');
 const registerRequestPayload = {
@@ -74,7 +110,10 @@ const registerRequestPayload = {
 }
 
 registerBtn.addEventListener('click', () => {
-    register(registerRequestPayload);
+    register(registerRequestPayload)
+        .then(result => console.log(result))
+        .catch(err => console.log(err))
+;
 });
 
 
@@ -85,18 +124,27 @@ const confirmAccountRequest = {
 };
 confirmAccountBtn.addEventListener('click', () => {
     confirmAccount(confirmAccountRequest)
+        .then(result => console.log(result))
+        .catch(err => console.log(err))
+        ;
 });
 
 const loginBtn = document.querySelector('button.login');
 const loginRequestPayload = {
-    email: registerRequest.email,
-    password: registerRequest.password,
+    email: registerRequestPayload.email,
+    password: registerRequestPayload.password,
 };
 
 loginBtn.addEventListener('click', () => {
-    loginBtn(loginRequestPayload);
+    login(loginRequestPayload)
+        .then(data => refreshAwsCredentials(data))
+        .catch(err => console.log(err))
+        ;
 });
 
 (() => {
-    hello("Ania :D");
+    getCurrentUser()
+        .then(profile => hello(profile.email))
+        .catch(err => hello('Guest'))
+    ;
 })();
